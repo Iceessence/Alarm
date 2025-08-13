@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent" android:layout_height="match_parent"
+  android:orientation="vertical" android:gravity="center" android:padding="24dp" android:background="#0D1429">
+  <TextView android:id="@+id/label" android:text="Alarm" android:textColor="#E5E7EB" android:textSize="28sp" android:layout_marginBottom="24dp"/>
+  <Button android:id="@+id/stopButton" android:text="STOP" android:layout_width="match_parent" android:layout_height="wrap_content" android:backgroundTint="#EF4444" android:textColor="#FFFFFF" android:layout_marginBottom="12dp"/>
+  <Button android:id="@+id/snoozeButton" android:text="SNOOZE 5 MIN" android:layout_width="match_parent" android:layout_height="wrap_content" android:backgroundTint="#22D3EE" android:textColor="#001018" android:layout_marginBottom="12dp"/>
+  <Button android:id="@+id/awakeButton" android:text="I'M AWAKE" android:layout_width="match_parent" android:layout_height="wrap_content" android:backgroundTint="#22C55E" android:textColor="#00180A"/>
+</LinearLayout>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Smart Alarm v8</title>
+<link rel="manifest" href="manifest.json"/>
+<style>body{margin:0;font-family:system-ui;background:#0f172a;color:#e5e7eb}
+.wrap{max-width:900px;margin:0 auto;padding:12px 12px 220px}
+.card{background:#0c1328;border:1px solid #1f2937;border-radius:16px;padding:12px;margin:10px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:12px;padding:10px 12px;font-weight:600;cursor:pointer}
+.primary{background:#22d3ee;color:#001018}.secondary{background:#1f2937;color:#e5e7eb}.danger{background:#ef4444;color:#fff}.ok{background:#22c55e;color:#00240a}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{background:#0a1123;border:1px solid #334155;color:#e5e7eb;border-radius:999px;padding:8px 10px;cursor:pointer}.chip.on{background:#22d3ee;color:#001018;border-color:transparent}
+.badge{background:#0b1226;border:1px solid #334155;border-radius:999px;padding:2px 8px;margin-left:6px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}@media(min-width:800px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:99}
+.modal.show{display:flex}.panel{background:#0d1429;border:1px solid #334155;border-radius:20px;padding:20px;max-width:640px;width:92vw;text-align:center}
+.big{font-size:44px;margin:6px 0}.timesRow{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#0b1226;border:1px solid #334155;border-radius:999px;padding:6px;display:flex;gap:6px;align-items:center}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="row">
+    <button id="btnPerm" class="btn secondary">Notifications</button>
+    <button id="btnTest" class="btn secondary">Test AV</button>
+    <button id="btnNew" class="btn primary">+ New Set</button>
+  </div>
+  <div id="editor" class="card" style="display:none">
+    <div class="row"><input id="label" placeholder="Set name" style="flex:1;padding:10px;border-radius:12px;border:1px solid #334155;background:#0b1226;color:#e5e7eb"/></div>
+    <div class="card">
+      <div>Times in this set</div><div id="timesWrap" class="timesRow"></div>
+      <button id="btnAddTime" class="btn secondary" style="margin-top:6px">+ Add time</button>
+    </div>
+    <div class="grid">
+      <div><div>Stops after</div><select id="duration"><option value="5">5s</option><option value="10">10s</option><option value="15">15s</option><option value="30">30s</option><option value="60" selected>1m</option><option value="120">2m</option><option value="300">5m</option><option value="infinite">Until I turn it off</option></select></div>
+      <div><div>Volume</div><input id="vol" type="range" min="0" max="1" step="0.01" value="1"/></div>
+      <div><div>Ramp (s)</div><input id="ramp" type="number" min="0" max="60" value="10"/></div>
+      <div><div>Sound</div><select id="sound"><option value="chime">Chime</option><option value="beep">Beep</option><option value="buzzer">Buzzer</option></select></div>
+      <div><div>Snooze (min)</div><input id="snooze" type="number" min="1" max="30" value="5"/></div>
+      <div><div>Boost to max</div><select id="boost"><option value="false" selected>No</option><option value="true">Yes</option></select></div>
+      <div><div>Anchor (A/B)</div><input id="anchor" type="date"/></div>
+    </div>
+    <div class="card">
+      <div class="row"><button id="modeSingle" class="btn secondary">Single weekly</button><button id="modeBi" class="btn primary">Biweekly (A/B)</button></div>
+      <div id="singlePanel" style="margin-top:8px"><div>Repeat every <input id="repeatN" type="number" min="1" max="8" value="1" style="width:60px"/> week(s)</div><div id="daysSingle" class="chips"></div></div>
+      <div id="biPanel" style="display:none;margin-top:8px"><div>Week A</div><div id="daysA" class="chips"></div><div style="margin-top:6px">Week B</div><div id="daysB" class="chips"></div></div>
+    </div>
+    <div class="row"><button id="btnSave" class="btn ok" style="flex:1">Save</button><button id="btnCancel" class="btn secondary">Cancel</button></div>
+  </div>
+  <div class="card"><div>Your Alarm Sets</div><div id="list"></div></div>
+  <div class="card"><div>Next Up</div><ol id="next"></ol></div>
+</div>
+<div class="modal" id="ringModal"><div class="panel">
+  <div id="ringLabel">Alarm</div><div id="ringTime" class="big">06:00</div>
+  <div class="row" style="justify-content:center;margin-top:10px">
+    <button id="btnStop" class="btn danger">STOP</button>
+    <button id="btnAwake" class="btn ok">I'M AWAKE</button>
+    <button id="btnSnooze" class="btn secondary">SNOOZE</button>
+  </div>
+</div></div>
+<script type="module">
+const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; const $=s=>document.querySelector(s);
+let sets=JSON.parse(localStorage.getItem('sa_sets_v8')||'[]'); let editing=null;
+function chipRow(id,on=[]){const row=$(id);row.innerHTML='';dayNames.forEach((nm,i)=>{const d=document.createElement('div');d.className='chip'+(on.includes(i)?' on':'');d.textContent=nm;d.dataset.i=i;d.onclick=()=>d.classList.toggle('on');row.appendChild(d);});}
+chipRow('#daysSingle',[1,2,3,4,5]);chipRow('#daysA',[1,2,4]);chipRow('#daysB',[1,2,3,4]);
+function timesUI(a){const w=$('#timesWrap');w.innerHTML='';(a||['06:00']).forEach(t=>addTime(t));}
+function addTime(v){const p=document.createElement('div');p.className='pill';p.innerHTML=`<input type="time" value="${v}"/><button class="btn secondary">x</button>`;p.querySelector('button').onclick=()=>p.remove();$('#timesWrap').appendChild(p);}
+$('#btnAddTime').onclick=()=>addTime('06:00');
+function mode(m){document.body.dataset.mode=m;$('#singlePanel').style.display=(m==='single')?'block':'none';$('#biPanel').style.display=(m==='bi')?'block':'none';}
+$('#modeSingle').onclick=()=>mode('single');$('#modeBi').onclick=()=>mode('bi');
+function openEditor(d){$('#editor').style.display='block';$('#label').value=d?.label||'Alarm Set';timesUI(d?.times||['06:00','06:30']);$('#duration').value=(d?.durationSec===-1)?'infinite':String(d?.durationSec||60);$('#vol').value=d?.volume??1;$('#ramp').value=d?.rampSec??10;$('#sound').value=d?.soundKey||'chime';$('#snooze').value=d?.snoozeMin??5;$('#boost').value=String(!!d?.boost);$('#anchor').value=d?.anchor||new Date().toISOString().slice(0,10);mode(d?.mode==='biweekly'?'bi':'single');setDays('#daysSingle',d?.daysSingle||[]);setDays('#daysA',d?.daysA||[]);setDays('#daysB',d?.daysB||[]);editing=d?.id||null;}
+function setDays(id,arr){document.querySelectorAll(id+' .chip').forEach(ch=>ch.classList.toggle('on',arr.includes(Number(ch.dataset.i))));}
+function selDays(id){return Array.from(document.querySelectorAll(id+' .chip.on')).map(ch=>Number(ch.dataset.i)).sort();}
+function getTimes(){return Array.from(document.querySelectorAll('#timesWrap input[type="time"]')).map(i=>i.value).filter(Boolean).sort();}
+$('#btnNew').onclick=()=>openEditor();$('#btnCancel').onclick=()=>{$('#editor').style.display='none';editing=null;};
+$('#btnSave').onclick=()=>{const dm=$('#duration').value;const obj={id:editing||String(Date.now()),label:$('#label').value||'Alarm Set',times:getTimes(),durationSec:(dm==='infinite')?-1:parseInt(dm,10),volume:parseFloat($('#vol').value||1),rampSec:parseInt($('#ramp').value||10,10),soundKey:$('#sound').value,snoozeMin:parseInt($('#snooze').value||5,10),boost:$('#boost').value==='true',anchor:$('#anchor').value,mode:(document.body.dataset.mode==='bi')?'biweekly':'single',repeatWeeks:1,daysSingle:(document.body.dataset.mode!=='bi')?selDays('#daysSingle'):[],daysA:(document.body.dataset.mode==='bi')?selDays('#daysA'):[],daysB:(document.body.dataset.mode==='bi')?selDays('#daysB'):[],enabled:true,lastFires:{},awakeToday:null};const i=sets.findIndex(s=>s.id===obj.id);if(i>=0)sets[i]=obj;else sets.push(obj);localStorage.setItem('sa_sets_v8',JSON.stringify(sets));render();$('#editor').style.display='none';editing=null;};
+function pretty(s){if(s.mode==='single'){const d=s.daysSingle?.length?s.daysSingle.map(i=>dayNames[i]).join(', '):'—';return `Every week on ${d}`;}else{const a=s.daysA?.length?s.daysA.map(i=>dayNames[i]).join(', '):'—';const b=s.daysB?.length?s.daysB.map(i=>dayNames[i]).join(', '):'—';return `Biweekly A→${a} / B→${b}`;}}
+function render(){const list=$('#list');list.innerHTML='';if(!sets.length){list.textContent='No sets yet.';return;}sets.forEach(s=>{const div=document.createElement('div');div.className='card';const stopTxt=s.durationSec===-1?'∞ until stop':(s.durationSec+'s');div.innerHTML=`<div><b>${s.label}</b> <span class="badge">${(s.times||[]).join(', ')}</span> <span class="badge">${stopTxt}</span> <span class="badge">${s.soundKey}</span> ${s.boost?'<span class="badge">boost</span>':''}</div><div style="font-size:12px;color:#94a3b8">${pretty(s)}</div><div class="row" style="margin-top:6px"><button class="btn secondary" data-act="test">Test</button><button class="btn secondary" data-act="edit">Edit</button><button class="btn ${s.enabled?'danger':'ok'}" data-act="toggle">${s.enabled?'Pause':'Resume'}</button><button class="btn danger" data-act="del">Delete</button></div>`;div.querySelector('[data-act="edit"]').onclick=()=>openEditor(s);div.querySelector('[data-act="del"]').onclick=()=>{if(confirm('Delete?')){sets=sets.filter(x=>x.id!==s.id);localStorage.setItem('sa_sets_v8',JSON.stringify(sets));render();}};div.querySelector('[data-act="toggle"]').onclick=()=>{s.enabled=!s.enabled;localStorage.setItem('sa_sets_v8',JSON.stringify(sets));render();};div.querySelector('[data-act="test"]').onclick=()=>{navigator.vibrate?.([0,300,150,300,150,600]);ringNow({...s,rampSec:0,durationSec:5},s.times?.[0]||'06:00');setTimeout(stopRing,2500);};list.appendChild(div);});computeNext();}
+function weekIndex(anchorISO,date){try{const a=new Date(anchorISO+'T00:00:00');const d=new Date(date.getFullYear(),date.getMonth(),date.getDate());return Math.floor((d-a)/86400000/7);}catch(e){return 0;}}
+function activeDay(s,date){const wd=date.getDay();if(s.mode==='single'){const idx=weekIndex(s.anchor,date);return (idx % (s.repeatWeeks||1)===0) && (s.daysSingle||[]).includes(wd);}else{const idx=weekIndex(s.anchor,date);const set=(idx%2===0)?(s.daysA||[]):(s.daysB||[]);return set.includes(wd);}}
+function nextN(n=10){const out=[];const now=new Date();const end=new Date(now.getTime()+1000*60*60*24*60);sets.filter(s=>s.enabled).forEach(s=>{for(let d=new Date(now);d<=end && out.length<500;d.setDate(d.getDate()+1)){if(activeDay(s,d)){(s.times||[]).forEach(t=>{const [h,m]=t.split(':').map(Number);const dt=new Date(d.getFullYear(),d.getMonth(),d.getDate(),h,m,0,0);if(dt>now) out.push({when:dt,label:s.label,id:s.id,time:t});});}}});out.sort((a,b)=>a.when-b.when);return out.slice(0,n);}
+function computeNext(){const ul=$('#next');const items=nextN(10);ul.innerHTML=items.map(it=>`<li>${it.when.toLocaleString([], {weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})} — ${it.label} (${it.time})</li>`).join('')||'<li>No upcoming alarms.</li>';}
+// Ring UI
+let media=null, ringTimer=null, rampInt=null, activeSet=null;
+function ringNow(s,time){activeSet=s;$('#ringLabel').textContent=s.label;$('#ringTime').textContent=time;$('#ringModal').classList.add('show');navigator.vibrate?.([0,400,200,400,200,800]);if(media){try{media.pause()}catch(e){};}media=new Audio('assets/'+(s.soundKey||'chime')+'.wav');media.loop=true;media.volume=0;media.play().catch(()=>{});let i=0,steps=Math.max(1,(s.rampSec||10)*10);const v=(s.volume??1);const id=setInterval(()=>{i++;media.volume=Math.min(1,v*i/steps);if(i>=steps)clearInterval(id);},100);if((s.durationSec??60)!==-1){ringTimer=setTimeout(stopRing,(s.durationSec||60)*1000);}}
+function stopRing(){navigator.vibrate?.(0);if(media){try{media.pause()}catch(e){};media=null;}clearTimeout(ringTimer);clearInterval(rampInt);$('#ringModal').classList.remove('show');}
+$('#btnStop').onclick=stopRing;$('#btnSnooze').onclick=()=>{stopRing();setTimeout(()=>ringNow(activeSet,'Snooze'),Math.max(1,(activeSet?.snoozeMin||5))*60*1000);};$('#btnAwake').onclick=()=>{stopRing();const today=new Date().toISOString().slice(0,10);const s=sets.find(x=>x.id===activeSet.id);if(s){s.awakeToday={date:today,skip:true};localStorage.setItem('sa_sets_v8',JSON.stringify(sets));}};
+// Timer loop
+let loop=null;function check(){const now=new Date();const keyDate=now.toISOString().slice(0,10);sets.forEach(s=>{if(!s.enabled) return;if(s.awakeToday?.date===keyDate && s.awakeToday?.skip) return;if(!activeDay(s, now)) return;(s.times||[]).forEach(t=>{const [h,m]=t.split(':').map(Number);if(now.getHours()===h && now.getMinutes()===m){if(!s.lastFires) s.lastFires={};const key=s.id+'|'+t+'|'+now.toISOString().slice(0,16);if(!s.lastFires[key]){s.lastFires[key]=true;localStorage.setItem('sa_sets_v8',JSON.stringify(sets));ringNow(s,t);}}});});computeNext();}
+function start(){if(loop) clearInterval(loop);loop=setInterval(check, 3000);check();}
+if(!sets.length){sets=[{id:String(Date.now()),label:'Morning Blocks',times:['06:00','06:30','07:00'],durationSec:60,volume:1,rampSec:10,soundKey:'chime',snoozeMin:5,boost:false,anchor:new Date().toISOString().slice(0,10),mode:'biweekly',daysA:[1,2,4],daysB:[1,2,3,4],enabled:true,lastFires:{}}];localStorage.setItem('sa_sets_v8',JSON.stringify(sets));}
+$('#btnTest').onclick=()=>{navigator.vibrate?.([0,300,150,300,150,600]);ringNow(sets[0], sets[0].times[0]);setTimeout(stopRing,2500);};
+$('#btnPerm').onclick=async()=>{if(!('Notification' in window)) return; const p=await Notification.requestPermission(); if(p!=='granted') alert('Notifications blocked.');};
+render();start();
+</script></body></html>
